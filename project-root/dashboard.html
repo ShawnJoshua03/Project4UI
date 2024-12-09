@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patient Dashboard</title>
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/responsive.css">
+  <style>
+    /* General styles for baby blue theme */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #e6f7ff; /* Baby blue background */
+      color: #333;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background-color: #ffffff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .logo {
+      height: 50px;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+    }
+
+    nav a {
+      text-decoration: none;
+      margin: 0 15px;
+      color: #007acc;
+      font-weight: bold;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    .notification-wrapper {
+      position: relative;
+    }
+
+    .notification-dropdown {
+      display: none;
+      position: absolute;
+      top: 35px;
+      right: 0;
+      background-color: #ffffff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      padding: 10px;
+      width: 200px;
+      z-index: 1000;
+    }
+
+    .notification-wrapper:hover .notification-dropdown {
+      display: block;
+    }
+
+    .notification-dropdown ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .notification-dropdown ul li {
+      padding: 5px 0;
+      border-bottom: 1px solid #ddd;
+    }
+
+    main.dashboard-container {
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      font-size: 1.8rem;
+      color: #007acc;
+      margin-bottom: 20px;
+    }
+
+    .patient-info p, .activity-log ul {
+      margin: 5px 0;
+    }
+
+    ul#activity-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    ul#activity-list li {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .communication {
+      background-color: #f9f9f9;
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    .messages {
+      margin-top: 15px;
+    }
+
+    .messages h3 {
+      margin-bottom: 10px;
+      font-size: 1.2rem;
+    }
+
+    #message-list {
+      max-height: 150px;
+      overflow-y: auto;
+      background-color: #ffffff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    #message-input {
+      width: calc(100% - 100px);
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+
+    #send-message {
+      padding: 8px 20px;
+      background-color: #007acc;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #send-message:hover {
+      background-color: #005f99;
+    }
+
+    .chat-panel {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 300px;
+      background-color: #ffffff;
+      border: 1px solid #ddd;
+      border-top-left-radius: 8px;
+      box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+      display: none;
+      flex-direction: column;
+    }
+
+    .chat-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background-color: #007acc;
+      color: #ffffff;
+      border-top-left-radius: 8px;
+    }
+
+    .chat-panel-messages {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+    }
+
+    .chat-panel-input {
+      display: flex;
+      padding: 10px;
+      border-top: 1px solid #ddd;
+    }
+
+    .chat-panel-input input {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+
+    .chat-panel-input button {
+      padding: 8px 20px;
+      background-color: #007acc;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 10px 0;
+      background-color: #f9f9f9;
+      margin-top: 20px;
+      font-size: 0.9rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <img src="assets/images/logo.png" alt="Hospital Logo" class="logo"/>
+  <nav>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="doctor-dashboard.html">Doctor-Dashboard</a>
+    <a href="appointments.html">Appointments</a>
+    <a href="room-log.html">Room Log</a>
+    <button id="dark-mode-toggle">🌓</button>
+    <div class="notification-wrapper">
+      <button id="notification-btn">🔔</button>
+      <div class="notification-dropdown" id="notification-dropdown">
+        <ul id="notification-list">
+          <li>Vitals checked for John Doe</li>
+          <li>New message from Dr. Smith</li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+</header>
+<main class="dashboard-container">
+  <section class="patient-info">
+    <h2>Patient: John Doe</h2>
+    <p>Current Condition: Stable</p>
+    <p>Medications: Aspirin (Daily), Insulin (Morning & Evening)</p>
+    <p>Doctor Notes: Continuing monitoring vitals, next check at 4 PM.</p>
+  </section>
+  <section class="activity-log">
+    <h2>Recent Activity</h2>
+    <ul id="activity-list">
+      <li>Blood pressure checked at 8:00 AM</li>
+      <li>Administered insulin at 9:00 AM</li>
+      <li>Breakfast provided at 9:30 AM</li>
+    </ul>
+  </section>
+  <section class="communication">
+    <h2>Communicate</h2>
+    <button id="start-video-call">Start Video Call</button>
+    <div class="messages">
+      <h3>Messages</h3>
+      <div id="message-list"></div>
+      <input type="text" id="message-input" placeholder="Type a message..."/>
+      <button id="send-message">Send</button>
+    </div>
+    <button id="toggle-chat-panel">Open Quick Chat</button>
+  </section>
+</main>
+<footer>
+  <p>&copy; 2024 Hospital Remote Connect</p>
+</footer>
+
+<!-- Slide-in chat panel -->
+<div id="chat-panel" class="chat-panel">
+  <div class="chat-panel-header">
+    <h2>Quick Chat</h2>
+    <button id="close-chat-panel">X</button>
+  </div>
+  <div class="chat-panel-messages" id="chat-panel-messages">
+    <p><strong>Doctor:</strong> Just checked the patient’s vitals, all good.</p>
+    <p><strong>You:</strong> Great, thanks for the update!</p>
+  </div>
+  <div class="chat-panel-input">
+    <input type="text" id="chat-panel-input" placeholder="Type a message..."/>
+    <button id="chat-panel-send">Send</button>
+  </div>
+</div>
+
+<script src="scripts/dashboard.js"></script>
+<script src="scripts/main.js"></script>
+</body>
+</html>

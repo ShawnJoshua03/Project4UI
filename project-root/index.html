@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hospital Remote Connect - Login</title>
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+  <style>
+    /* General baby blue theme styles */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #e6f7ff; /* Baby blue background */
+      color: #333;
+    }
+
+    header {
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+      background-color: #ffffff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .logo {
+      height: 50px;
+    }
+
+    main.auth-container {
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    main.auth-container h1 {
+      text-align: center;
+      color: #007acc;
+      margin-bottom: 30px;
+    }
+
+    .auth-forms {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+    }
+
+    form {
+      width: 45%;
+      padding: 20px;
+      background-color: #f9f9f9;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    form h2 {
+      color: #007acc;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    form label {
+      display: block;
+      margin-bottom: 15px;
+      color: #333;
+    }
+
+    form input, form select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+
+    form button {
+      width: 100%;
+      padding: 10px;
+      background-color: #007acc;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    form button:hover {
+      background-color: #005f99;
+    }
+
+    footer {
+      text-align: center;
+      padding: 10px 0;
+      background-color: #f9f9f9;
+      margin-top: 20px;
+      font-size: 0.9rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <img src="assets/images/logo.png" alt="Hospital Logo" class="logo"/>
+</header>
+<main class="auth-container">
+  <h1>Welcome to Hospital Remote Connect</h1>
+  <div class="auth-forms">
+    <!-- Login Form -->
+    <form id="login-form">
+      <h2>Login</h2>
+      <label>Email: 
+        <input type="email" id="login-email" required placeholder="user@example.com"/>
+      </label>
+      <label>Password:
+        <input type="password" id="login-password" required/>
+      </label>
+      <button type="submit">Login</button>
+    </form>
+
+    <!-- Signup Form -->
+    <form id="signup-form">
+      <h2>Sign Up</h2>
+      <label>Email: 
+        <input type="email" id="signup-email" required placeholder="newuser@example.com"/>
+      </label>
+      <label>Password:
+        <input type="password" id="signup-password" required/>
+      </label>
+      <label>Role:
+        <select id="signup-role">
+          <option value="family">Family Member</option>
+          <option value="doctor">Doctor</option>
+        </select>
+      </label>
+      <button type="submit">Sign Up</button>
+    </form>
+  </div>
+</main>
+<footer>
+  <p>&copy; 2024 Hospital Remote Connect</p>
+</footer>
+<script src="scripts/auth.js"></script>
+</body>
+</html>
