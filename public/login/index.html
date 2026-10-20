@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+    <meta name="theme-color" content="#49364f">
+    <title>Sign in · Bedside</title>
+    <link rel="stylesheet" href="/css/bedside.css">
+    <script type="module" src="/app/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div id="app"><main id="main" class="boot" aria-busy="true"><span class="brand-mark" aria-hidden="true">b.</span><p>Opening Bedside…</p></main></div>
+    <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+    <dialog id="action-dialog" aria-labelledby="dialog-title"></dialog>
+    <dialog id="alert-dialog" class="urgent-dialog" aria-labelledby="urgent-title" aria-describedby="urgent-description"></dialog>
+  </body>
+</html>
