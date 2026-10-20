@@ -1,7 +1,10 @@
 export const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[char]));
-export const list = (value, key) => Array.isArray(value) ? value : value?.[key] || [];
+export const list = (value, key) => {
+  const items = Array.isArray(value) ? value : value?.[key] ?? (key === 'education' ? value?.articles : null);
+  return Array.isArray(items) ? items : [];
+};
 export const unwrap = (value, key) => value?.[key] || value;
 export const dateOf = item => item.createdAt || item.created_at || item.updatedAt || item.updated_at;
 export const formatDate = (value, options = {}) => {
@@ -46,6 +49,7 @@ export function toast(message, isError = false) {
   window.setTimeout(() => el.remove(), isError ? 10000 : 6000);
 }
 export function safeLink(value) {
+  if (typeof value !== 'string' || !value.trim()) return '';
   try {
     const url = new URL(value, location.origin);
     return ['http:', 'https:'].includes(url.protocol) ? escapeHtml(url.href) : '';

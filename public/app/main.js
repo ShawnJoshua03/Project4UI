@@ -18,6 +18,12 @@ let holdTimer;
 let holdButton;
 let holdStarted = 0;
 let sessionVersion = 0;
+let authBusy = false;
+const pendingForms = new Set();
+const pendingActions = new Set();
+const alertChanges = new Map();
+let alertRevision = 0;
+let dialogReturnFocus = null;
 const themeMedia = matchMedia('(prefers-color-scheme: dark)');
 const storage = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -106,7 +112,7 @@ function renderMain(preserve = false) {
   else {
     const heading = `<div class="page-heading"><div><p class="small-label">${family() ? 'Connected to what matters' : `${state.patients.length} assigned patients`}</p><h1>${family() ? 'Care, within reach.' : 'Your care queue.'}</h1><p class="muted">${family() ? 'The latest updates. The people who care. All together.' : 'See what needs attention and keep families in the loop.'}</p></div>${family() && state.patients.length > 1 ? `<div class="patient-picker"><label for="patient-picker">Your loved one</label><select id="patient-picker">${state.patients.map(p => `<option value="${e(p.id)}" ${sameId(p.id, state.selected) ? 'selected' : ''}>${e(p.name)}</option>`).join('')}</select></div>` : `<span class="today">${e(new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'short', day: 'numeric' }).format(new Date()))}</span>`}</div>`;
     const body = state.error ? `<section class="error-panel" role="alert"><h2>Care information couldn’t load</h2><p>${e(state.error)}</p><button class="button secondary" data-action="refresh">Try again</button></section>` :
-      !state.patients.length ? empty('No patients linked yet', 'Your care team will connect your account to a patient. Refresh to check again.') :
+      !state.patients.length ? state.loading ? '<div class="loading-panel" role="status">Gathering the latest care updates…</div>' : empty('No patients linked yet', 'Your care team will connect your account to a patient. Refresh to check again.') :
       family() ? familyView() : clinicianView();
     main.innerHTML = `${heading}${body}`;
   }
@@ -114,6 +120,12 @@ function renderMain(preserve = false) {
     const el = id && document.getElementById(id);
     if (el) el.value = value;
   }
+  main.querySelectorAll('form').forEach(form => {
+    const busy = pendingForms.has(`${form.id}:${state.selected}`);
+    form.querySelector('[type="submit"]').disabled = busy;
+    form.setAttribute('aria-busy', String(busy));
+  });
+  restoreBusyActions();
   if (focused?.id) {
     const el = document.getElementById(focused.id);
     el?.focus({ preventScroll: true });
@@ -121,6 +133,11 @@ function renderMain(preserve = false) {
       try { el.setSelectionRange(focused.start, focused.end); } catch { /* Date inputs have no selection. */ }
     }
   }
+}
+function restoreBusyActions() {
+  document.querySelectorAll('[data-action][data-id]').forEach(button => {
+    button.disabled = pendingActions.has(`${button.dataset.action}:${button.dataset.id}`);
+  });
 }
 
 function hero(patient, compact = false) {
@@ -201,6 +218,7 @@ function educationView() {
 async function loadPatients() {
   const version = ++refreshVersion;
   const session = sessionVersion;
+  const alertsAtRequest = alertRevision;
   try {
     const [patients, education, alerts] = await Promise.allSettled([
       api.patients(), api.education(), family() ? Promise.resolve([]) : api.alerts(),
@@ -210,14 +228,23 @@ async function loadPatients() {
     state.patients = list(patients.value, 'patients');
     for (const [key, result] of [['education', education], ['alerts', alerts]]) {
       state.resourceErrors[key] = result.status === 'rejected' ? result.reason.message : '';
-      if (result.status === 'fulfilled') state[key] = list(result.value, key);
+      if (result.status === 'fulfilled') {
+        state[key] = list(result.value, key);
+        if (key === 'alerts') {
+          const merged = new Map(state.alerts.map(alert => [String(alert.id), alert]));
+          for (const [id, change] of alertChanges) {
+            if (change.revision > alertsAtRequest) merged.set(id, { ...merged.get(id), ...change.alert });
+          }
+          state.alerts = [...merged.values()].filter(alert => alert.status !== 'resolved');
+        }
+      }
     }
     state.error = '';
     if (!state.patients.some(p => sameId(p.id, state.selected))) {
       state.selected = [...state.patients].sort((a, b) => priority(b) - priority(a))[0]?.id ?? null;
     }
     if (state.selected !== null) await loadPatient(state.selected, true);
-    else renderMain();
+    else { state.loading = false; renderMain(); }
     showUrgent();
   } catch (error) {
     if (session !== sessionVersion) return;
@@ -262,7 +289,9 @@ async function startSession(user) {
   state.error = '';
   state.resourceErrors = {};
   state.selected = null; state.patient = null; state.patients = [];
+  state.loading = true;
   state.alerts = []; state.familyAlerts = {}; state.page = 'care'; state.tab = 'visits';
+  alertChanges.clear();
   try { state.familyAlerts = JSON.parse(sessionStorage.getItem(`bedside-alerts-${user.id}`) || '{}'); } catch { /* Optional persistence. */ }
   history.replaceState(null, '', '/');
   renderShell();
@@ -291,6 +320,7 @@ async function handleEvent(type, payload) {
       }
       announce(`Emergency alert update for ${patientName(patientId)}: ${item.status || 'sent'}.`);
     } else {
+      rememberAlert({ ...item, patientId });
       const index = state.alerts.findIndex(alert => sameId(alert.id, item.id));
       if (item.status === 'resolved') state.alerts = state.alerts.filter(alert => !sameId(alert.id, item.id));
       else if (index >= 0) state.alerts[index] = { ...state.alerts[index], ...item, patientId };
@@ -304,8 +334,15 @@ async function handleEvent(type, payload) {
     if (sameId(patientId, state.selected)) await loadPatient(state.selected, true);
   }
 }
+function rememberAlert(alert) {
+  alertChanges.set(String(alert.id), { revision: ++alertRevision, alert });
+}
 
 function openDialog(html) {
+  if (!dialog.open) {
+    const origin = document.activeElement;
+    dialogReturnFocus = { id: origin.id, action: origin.dataset.action, item: origin.dataset.id };
+  }
   dialog.innerHTML = html;
   if (!dialog.open) dialog.showModal();
 }
@@ -336,14 +373,16 @@ function startHold(button) {
   holdStarted = performance.now();
   button.classList.add('holding');
   button.querySelector('span').textContent = 'Keep holding…';
-  holdTimer = setTimeout(() => {
-    if (performance.now() - holdStarted < 1500) return;
+  const completeHold = () => {
+    const remaining = 1500 - (performance.now() - holdStarted);
+    if (remaining > 0) { holdTimer = setTimeout(completeHold, remaining); return; }
     cancelHold();
     pendingAlert = { patientId: state.selected, patientName: state.patient.name };
     openDialog(`${dialogHeader('What’s concerning you?', `Choose a reason for notifying ${e(pendingAlert.patientName)}’s care team.`)}
       <form id="alert-reason-form"><label for="alert-reason">Reason for the alert</label><select id="alert-reason" name="reason" required><option value="">Choose a reason</option><option>Sudden change in condition</option><option>Breathing concern</option><option>Pain or discomfort</option><option>Need urgent help from the care team</option><option>Other urgent concern</option></select><label for="alert-details">More detail <span class="muted">(optional)</span></label><textarea id="alert-details" name="details" rows="3" maxlength="1000"></textarea><p class="emergency-note">Demo only. For a real emergency, contact hospital staff or local emergency services directly.</p><div class="dialog-actions"><button class="button secondary" type="button" data-action="close-dialog">Cancel</button><button class="button danger" type="submit">Review alert</button></div></form>`);
     announce('Hold complete. Choose an emergency alert reason.');
-  }, 1500);
+  };
+  holdTimer = setTimeout(completeHold, 1500);
 }
 
 function showUrgent() {
@@ -355,6 +394,8 @@ function showUrgent() {
   urgentDialog.dataset.alertId = alert.id;
   urgentDialog.innerHTML = `<div class="urgent-symbol">${icon('cross')}</div><p class="small-label">Family emergency alert</p><h2 id="urgent-title">${e(patientName(patientIdOf(alert)))}</h2><p id="urgent-description" class="urgent-reason">${e(alert.reason)}</p><div class="waiting-clock"><span>Waiting for acknowledgement</span><strong data-waiting-since="${e(dateOf(alert) || new Date().toISOString())}">0:00</strong></div><p class="muted">Acknowledge this alert to let the family know the care team is aware.</p><p class="form-error" role="alert"></p><button class="button danger full" data-action="acknowledge" data-id="${e(alert.id)}">Acknowledge alert</button><small class="urgent-footnote">Acknowledging does not mark the alert as resolved.</small>`;
   if (!urgentDialog.open) urgentDialog.showModal();
+  urgentDialog.querySelector('button').focus();
+  restoreBusyActions();
   updateTimers();
 }
 function updateTimers() {
@@ -365,11 +406,21 @@ function updateTimers() {
 }
 setInterval(updateTimers, 1000);
 urgentDialog.addEventListener('cancel', event => event.preventDefault());
-dialog.addEventListener('close', () => { pendingAlert = null; });
+dialog.addEventListener('close', () => {
+  pendingAlert = null;
+  if (!urgentDialog.open && !dialog.open && dialogReturnFocus) {
+    const target = dialogReturnFocus.id ? document.getElementById(dialogReturnFocus.id) :
+      [...root.querySelectorAll('[data-action]')].find(el => el.dataset.action === dialogReturnFocus.action && el.dataset.id === dialogReturnFocus.item);
+    target?.focus({ preventScroll: true });
+  }
+  dialogReturnFocus = null;
+});
 
 async function withForm(form, action) {
   const button = form.querySelector('[type="submit"]');
-  if (button.disabled) return;
+  const key = `${form.id}:${state.selected}`;
+  if (button.disabled || pendingForms.has(key)) return;
+  pendingForms.add(key);
   const error = form.querySelector('.form-error');
   if (error) error.textContent = '';
   button.disabled = true;
@@ -377,7 +428,16 @@ async function withForm(form, action) {
   try { await action(); } catch (err) {
     if (error && error.isConnected) error.textContent = err.message;
     else toast(err.message, true);
-  } finally { button.disabled = false; form.removeAttribute('aria-busy'); }
+  } finally {
+    pendingForms.delete(key);
+    button.disabled = false;
+    form.removeAttribute('aria-busy');
+    const current = document.getElementById(form.id);
+    if (current && `${form.id}:${state.selected}` === key) {
+      current.querySelector('[type="submit"]').disabled = false;
+      current.removeAttribute('aria-busy');
+    }
+  }
 }
 
 root.addEventListener('submit', async event => {
@@ -387,12 +447,17 @@ root.addEventListener('submit', async event => {
   const patientId = state.selected;
   await withForm(form, async () => {
     if (form.id === 'login-form') {
-      await startSession(unwrap(await api.login(data.get('email').trim(), data.get('password')), 'user'));
+      if (authBusy) return;
+      authBusy = true;
+      try { await startSession(unwrap(await api.login(data.get('email').trim(), data.get('password')), 'user')); }
+      finally { authBusy = false; }
     } else if (form.id === 'message-form') {
       const body = data.get('body').trim();
       if (!body) throw new Error('Write a message before sending.');
       await api.sendMessage(patientId, body);
       form.reset();
+      const current = sameId(patientId, state.selected) && document.getElementById('message-body');
+      if (current?.value.trim() === body) current.value = '';
       toast('Message sent.');
       if (sameId(patientId, state.selected)) await loadPatient(patientId, true);
     } else if (form.id === 'summary-form') {
@@ -400,6 +465,8 @@ root.addEventListener('submit', async event => {
       if (!summary) throw new Error('Write a care update before publishing.');
       await api.addVisit(patientId, summary);
       form.reset();
+      const current = sameId(patientId, state.selected) && document.getElementById('summary');
+      if (current?.value.trim() === summary) current.value = '';
       toast('Care update shared with the family.');
       if (sameId(patientId, state.selected)) await loadPatient(patientId, true);
     }
@@ -459,9 +526,13 @@ document.addEventListener('click', async event => {
     openDialog(`${dialogHeader('Confirm a visit')}<form id="confirm-appointment-form" data-id="${e(appointment.id)}"><label for="scheduled-at">Confirmed date and time</label><input type="datetime-local" id="scheduled-at" name="scheduledAt" required min="${localDateTime(new Date())}" value="${Number.isFinite(requested.getTime()) ? localDateTime(requested) : ''}"><small>Times are shown in your local time zone.</small><p class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button secondary" data-action="close-dialog">Cancel</button><button type="submit" class="button primary">Confirm visit</button></div></form>`);
     return;
   }
+  const actionKey = `${action}:${button.dataset.id || ''}`;
+  if (pendingActions.has(actionKey) || (action === 'demo' && authBusy)) return;
+  pendingActions.add(actionKey);
   button.disabled = true;
   try {
     if (action === 'demo') {
+      authBusy = true;
       root.querySelectorAll('[data-action="demo"], #login-form button').forEach(el => { el.disabled = true; });
       await startSession(unwrap(await api.login(`${button.dataset.role}@demo.test`, 'demo-password'), 'user'));
     } else if (action === 'logout') {
@@ -481,6 +552,7 @@ document.addEventListener('click', async event => {
     } else if (action === 'acknowledge' || action === 'resolve') {
       const alert = state.alerts.find(item => sameId(item.id, button.dataset.id));
       const result = unwrap(await api.updateAlert(button.dataset.id, action === 'acknowledge' ? 'acknowledged' : 'resolved'), 'alert');
+      rememberAlert({ ...alert, ...result, id: button.dataset.id, status: action === 'acknowledge' ? 'acknowledged' : 'resolved' });
       if (action === 'resolve') state.alerts = state.alerts.filter(item => !sameId(item.id, button.dataset.id));
       else state.alerts = state.alerts.map(item => sameId(item.id, button.dataset.id) ? { ...item, ...result, status: 'acknowledged' } : item);
       showUrgent(); renderMain(true);
@@ -496,6 +568,9 @@ document.addEventListener('click', async event => {
     if (errorEl) errorEl.textContent = error.message;
     else toast(error.message, true);
   } finally {
+    if (action === 'demo') authBusy = false;
+    pendingActions.delete(actionKey);
+    restoreBusyActions();
     sendingAlert = false;
     button.disabled = false;
     root.querySelectorAll('[data-action="demo"], #login-form button').forEach(el => { el.disabled = false; });
