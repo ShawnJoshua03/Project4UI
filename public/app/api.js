@@ -54,6 +54,7 @@ export const api = {
   sendMessage: (value, body) => request(`${patientPath(value)}/messages`, { method: 'POST', body: { body } }),
   sendAlert: (value, reason) => request(`${patientPath(value)}/alerts`, { method: 'POST', body: { reason } }),
   alerts: () => request('/alerts'),
+  patientAlerts: value => request(`${patientPath(value)}/alerts`),
   updateAlert: (value, status) => request(`/alerts/${id(value)}`, { method: 'PATCH', body: { status } }),
   education: () => request('/education'),
   subscribe(onEvent, onConnection) {

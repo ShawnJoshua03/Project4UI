@@ -1,34 +1,15 @@
 import express from 'express';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { db, seedDemoData } from './db.js';
+import { db } from './db.js';
+import * as realtime from './realtime.js';
+import { seed } from './seed.js';
 import { rateLimitLogin, requireAuth, requireCsrf } from './auth.js';
 import { authRoutes } from './routes/auth.js';
 import { patientRoutes } from './routes/patients.js';
 import { appointmentRoutes } from './routes/appointments.js';
 import { educationRoutes } from './routes/education.js';
 
-async function optionalModule(relativePath, fallback) {
-  const url = new URL(relativePath, import.meta.url);
-  try {
-    return await import(url.href);
-  } catch (error) {
-    // Missing dependencies *inside* an existing module are real startup failures.
-    if (error.code !== 'ERR_MODULE_NOT_FOUND' || error.url !== url.href) throw error;
-    console.warn(`${relativePath} is absent; using the backend fallback.`);
-    return fallback();
-  }
-}
-
-const realtime = await optionalModule('./realtime.js', () => import('./routes/realtime-fallback.js'));
-if (typeof realtime.registerRealtime !== 'function' || typeof realtime.publish !== 'function') {
-  throw new Error('server/realtime.js must export registerRealtime and publish functions');
-}
-
-const seed = await optionalModule('./seed.js', () => ({ seed: seedDemoData }));
-// Side-effect seed modules are also supported; the fallback only seeds an empty DB.
-if (typeof seed.seed === 'function') await seed.seed(db);
-else if (typeof seed.default === 'function') await seed.default(db);
-seedDemoData();
+seed(db);
 
 export const app = express();
 app.disable('x-powered-by');

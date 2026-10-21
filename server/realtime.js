@@ -1,3 +1,6 @@
+import { validId } from './auth.js';
+import { publishAfterWrite } from './routes/utils.js';
+
 /**
  * Shared server-sent-events hub and the emergency-alert API.
  *
@@ -33,27 +36,44 @@ function normalizeAlert(row) {
   return {
     id: row.id,
     patientId: row.patient_id,
-    userId: row.user_id,
+    createdBy: row.created_by,
     reason: row.reason,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    acknowledgedAt: row.acknowledged_at,
+    resolvedAt: row.resolved_at,
   };
 }
 
 function canAccessPatient(db, userId, patientId) {
-  return Boolean(
+  return validId(patientId) && Boolean(
     db.prepare('SELECT 1 FROM patient_users WHERE user_id = ? AND patient_id = ?')
       .get(userId, patientId),
   );
+}
+
+function sessionIsActive(client) {
+  const active = configuredDb.prepare('SELECT 1 FROM sessions WHERE id = ? AND user_id = ? AND expires_at > ?')
+    .get(client.sessionId, client.userId, new Date().toISOString());
+  if (!active) client.response.end();
+  return Boolean(active);
+}
+
+function writeToClient(client, write) {
+  try {
+    if (sessionIsActive(client)) write(client.response);
+  } catch {
+    client.response.destroy();
+  }
 }
 
 function startHeartbeat() {
   if (heartbeat) return;
 
   heartbeat = setInterval(() => {
-    for (const { response } of clients.values()) {
-      response.write(': keep-alive\n\n');
+    for (const client of clients.values()) {
+      writeToClient(client, response => response.write(': keep-alive\n\n'));
     }
   }, 25_000);
   heartbeat.unref?.();
@@ -83,7 +103,7 @@ export function publish(type, patientId, payload = {}) {
 
   for (const client of clients.values()) {
     if (allowed.has(String(client.userId))) {
-      sendEvent(client.response, type, event);
+      writeToClient(client, response => sendEvent(response, type, event));
     }
   }
 }
@@ -112,8 +132,18 @@ export function registerRealtime(app, { requireAuth, db }) {
     res.flushHeaders?.();
     res.write('retry: 3000\n\n');
 
-    clients.set(clientId, { response: res, userId });
-    req.on('close', () => clients.delete(clientId));
+    clients.set(clientId, { response: res, userId, sessionId: req.sessionId });
+    res.once('close', () => clients.delete(clientId));
+  });
+
+  // Fetch the latest persisted state after a reload or a missed SSE event.
+  app.get('/api/patients/:id/alerts', requireAuth, (req, res) => {
+    if (!canAccessPatient(db, req.user.id, req.params.id)) {
+      return sendError(res, 404, 'Patient not found');
+    }
+    const alerts = db.prepare(`SELECT * FROM alerts WHERE patient_id = ?
+      ORDER BY created_at DESC, id DESC LIMIT 50`).all(req.params.id).map(normalizeAlert);
+    res.json({ alerts });
   });
 
   app.post('/api/patients/:id/alerts', requireAuth, (req, res) => {
@@ -123,8 +153,8 @@ export function registerRealtime(app, { requireAuth, db }) {
 
     const patientId = req.params.id;
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
-    if (!reason || reason.length > 1000) {
-      return sendError(res, 400, 'reason must be between 1 and 1000 characters');
+    if (!reason || reason.length > 2000) {
+      return sendError(res, 400, 'reason must be between 1 and 2000 characters');
     }
     if (!canAccessPatient(db, req.user.id, patientId)) {
       return sendError(res, 404, 'Patient not found');
@@ -132,14 +162,14 @@ export function registerRealtime(app, { requireAuth, db }) {
 
     const now = new Date().toISOString();
     const result = db.prepare(`
-      INSERT INTO alerts (patient_id, user_id, reason, status, created_at, updated_at)
+      INSERT INTO alerts (patient_id, created_by, reason, status, created_at, updated_at)
       VALUES (?, ?, ?, 'sent', ?, ?)
     `).run(patientId, req.user.id, reason, now, now);
     const alert = normalizeAlert(
       db.prepare('SELECT * FROM alerts WHERE id = ?').get(result.lastInsertRowid),
     );
 
-    publish('alert', patientId, { alert });
+    publishAfterWrite(publish, 'alert', Number(patientId), { alert });
     return res.status(201).json({ alert });
   });
 
@@ -153,7 +183,8 @@ export function registerRealtime(app, { requireAuth, db }) {
       return sendError(res, 400, 'status must be acknowledged or resolved');
     }
 
-    const existing = db.prepare('SELECT * FROM alerts WHERE id = ?').get(req.params.id);
+    const existing = validId(req.params.id)
+      ? db.prepare('SELECT * FROM alerts WHERE id = ?').get(req.params.id) : null;
     if (!existing || !canAccessPatient(db, req.user.id, existing.patient_id)) {
       return sendError(res, 404, 'Alert not found');
     }
@@ -162,11 +193,13 @@ export function registerRealtime(app, { requireAuth, db }) {
     }
 
     const now = new Date().toISOString();
-    db.prepare('UPDATE alerts SET status = ?, updated_at = ? WHERE id = ?')
-      .run(status, now, existing.id);
+    db.prepare(`UPDATE alerts SET status = ?, updated_at = ?,
+      acknowledged_at = CASE WHEN ? = 'acknowledged' THEN ? ELSE acknowledged_at END,
+      resolved_at = CASE WHEN ? = 'resolved' THEN ? ELSE resolved_at END WHERE id = ?`)
+      .run(status, now, status, now, status, now, existing.id);
     const alert = normalizeAlert(db.prepare('SELECT * FROM alerts WHERE id = ?').get(existing.id));
 
-    publish('alert', existing.patient_id, { alert });
+    publishAfterWrite(publish, 'alert', existing.patient_id, { alert });
     return res.json({ alert });
   });
 

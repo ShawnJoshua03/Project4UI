@@ -1,12 +1,6 @@
-import { randomBytes, scryptSync } from 'node:crypto';
+import { hashPassword } from './auth.js';
 
 const DEMO_PASSWORD = 'demo-password';
-
-function passwordHash(password) {
-  const salt = randomBytes(16).toString('hex');
-  const key = scryptSync(password, salt, 64).toString('hex');
-  return `${salt}:${key}`;
-}
 
 /** Seed deterministic demo identities and linked patients into an empty database. */
 export function seed(db) {
@@ -32,10 +26,10 @@ export function seed(db) {
 
   db.transaction(() => {
     const family = insertUser.run({
-      email: 'family@demo.test', passwordHash: passwordHash(DEMO_PASSWORD), role: 'family', name: 'Alex Morgan',
+      email: 'family@demo.test', passwordHash: hashPassword(DEMO_PASSWORD), role: 'family', name: 'Alex Morgan',
     }).lastInsertRowid;
     const clinician = insertUser.run({
-      email: 'clinician@demo.test', passwordHash: passwordHash(DEMO_PASSWORD), role: 'clinician', name: 'Dr. Jordan Lee',
+      email: 'clinician@demo.test', passwordHash: hashPassword(DEMO_PASSWORD), role: 'clinician', name: 'Dr. Jordan Lee',
     }).lastInsertRowid;
     const patient = insertPatient.run({
       name: 'Sam Morgan', room: '412', status: 'monitoring', condition: 'Recovering after surgery', updatedAt: new Date().toISOString(),

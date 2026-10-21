@@ -67,6 +67,7 @@ export function requireAuth(req, res, next) {
   `).get(sessionId(token), new Date().toISOString());
   if (!user) return res.status(401).json({ error: 'Authentication required' });
   req.user = publicUser(user);
+  req.sessionId = sessionId(token);
   next();
 }
 

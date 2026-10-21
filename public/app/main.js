@@ -165,6 +165,7 @@ function familyView() {
 }
 
 function familyAlertView() {
+  if (state.resourceErrors.familyAlerts) return `<div id="family-alert-status" class="error-panel" role="alert">Alert status could not refresh. ${e(state.resourceErrors.familyAlerts)} <button class="quiet-button" data-action="refresh">Retry</button></div>`;
   const alert = state.familyAlerts[state.selected];
   if (!alert) return '<div id="family-alert-status"></div>';
   const step = alert.status === 'resolved' ? 2 : alert.status === 'acknowledged' ? 1 : 0;
@@ -256,6 +257,7 @@ async function loadPatients() {
 async function loadPatient(value, preserve = false) {
   const version = ++loadVersion;
   const session = sessionVersion;
+  const alertsAtRequest = alertRevision;
   const changing = !sameId(state.selected, value) || !state.patient;
   state.selected = value;
   if (changing) {
@@ -264,7 +266,10 @@ async function loadPatient(value, preserve = false) {
     state.visits = []; state.messages = []; state.appointments = [];
     renderMain();
   }
-  const results = await Promise.allSettled([api.patient(value), api.visits(value), api.messages(value), api.appointments(value)]);
+  const results = await Promise.allSettled([
+    api.patient(value), api.visits(value), api.messages(value), api.appointments(value),
+    family() ? api.patientAlerts(value) : Promise.resolve(null),
+  ]);
   if (version !== loadVersion || session !== sessionVersion || !state.user) return;
   state.loading = false;
   if (results[0].status === 'rejected') {
@@ -277,6 +282,23 @@ async function loadPatient(value, preserve = false) {
       const result = results[index];
       state.resourceErrors[key] = result.status === 'rejected' ? result.reason.message : '';
       if (result.status === 'fulfilled') state[key] = list(result.value, key);
+    }
+    if (family()) {
+      const result = results[4];
+      state.resourceErrors.familyAlerts = result.status === 'rejected' ? result.reason.message : '';
+      if (result.status === 'fulfilled') {
+        const merged = new Map(list(result.value, 'alerts').map(alert => [String(alert.id), alert]));
+        for (const [id, change] of alertChanges) {
+          if (change.revision > alertsAtRequest && sameId(patientIdOf(change.alert), value)) {
+            merged.set(id, { ...merged.get(id), ...change.alert });
+          }
+        }
+        const latest = [...merged.values()].sort((a, b) =>
+          new Date(dateOf(b)) - new Date(dateOf(a)) || Number(b.id) - Number(a.id))[0];
+        if (latest) state.familyAlerts[value] = latest;
+        else delete state.familyAlerts[value];
+        saveFamilyAlerts();
+      }
     }
   }
   renderMain(preserve && !changing);
@@ -312,6 +334,7 @@ async function handleEvent(type, payload) {
   const item = payload[type] || payload;
   const patientId = payload.patientId ?? patientIdOf(item);
   if (type === 'alert') {
+    rememberAlert({ ...item, patientId });
     if (family()) {
       const previous = state.familyAlerts[patientId];
       if (!previous || sameId(previous.id, item.id) || dateOf(item) >= dateOf(previous)) {
@@ -320,7 +343,6 @@ async function handleEvent(type, payload) {
       }
       announce(`Emergency alert update for ${patientName(patientId)}: ${item.status || 'sent'}.`);
     } else {
-      rememberAlert({ ...item, patientId });
       const index = state.alerts.findIndex(alert => sameId(alert.id, item.id));
       if (item.status === 'resolved') state.alerts = state.alerts.filter(alert => !sameId(alert.id, item.id));
       else if (index >= 0) state.alerts[index] = { ...state.alerts[index], ...item, patientId };
@@ -547,6 +569,7 @@ document.addEventListener('click', async event => {
       // An SSE acknowledgement can arrive before the POST response.
       const live = state.familyAlerts[pending.patientId];
       state.familyAlerts[pending.patientId] = live && sameId(live.id, alert.id) ? { ...alert, ...live } : { ...alert, reason: pending.reason };
+      rememberAlert({ ...state.familyAlerts[pending.patientId], patientId: pending.patientId });
       saveFamilyAlerts();
       dialog.close(); renderMain(true); toast('Emergency alert sent to the care team.');
     } else if (action === 'acknowledge' || action === 'resolve') {

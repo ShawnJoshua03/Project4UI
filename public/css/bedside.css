@@ -384,10 +384,10 @@ blockquote { margin: 24px 0; padding: 16px; border-left: 3px solid var(--danger)
 @media (max-width: 480px) {
   .workspace { padding: 0 16px; }
   .sidebar { padding-left: 16px; padding-right: 16px; }
-  .hero-top { flex-wrap: wrap; gap: 13px; }
+  .hero-top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 13px; }
   .hero-top > div { flex: 1; min-width: 0; }
   .hero-top h2 { font-size: 28px; }
-  .hero-top .badge { margin-left: 0; }
+  .hero-top .badge { margin-left: 0; grid-column: 1 / -1; }
   .avatar { width: 51px; height: 51px; font-size: 22px; }
   .patient-hero { padding: 22px 20px 0; }
   .hero-condition { padding-top: 21px; }

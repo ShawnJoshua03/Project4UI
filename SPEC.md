@@ -50,6 +50,7 @@ they are not linked to (test this).
 | GET | /api/patients/:id/messages | linked | |
 | POST | /api/patients/:id/messages | linked | `{body}` max 2000 chars |
 | POST | /api/patients/:id/alerts | family | emergency alert `{reason}` ; clinician gets it live |
+| GET | /api/patients/:id/alerts | linked | newest 50 persisted alerts, including resolved; `{alerts}` for reconnect recovery |
 | PATCH | /api/alerts/:id | clinician | `{status:'acknowledged'|'resolved'}` |
 | GET | /api/alerts | clinician | open alerts, oldest first |
 | GET | /api/education | any | static curated articles |
